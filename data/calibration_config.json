@@ -1,0 +1,15 @@
+{
+  "divisor": 20.5264,
+  "threshold": 0.5,
+  "raw_threshold": 10.2632,
+  "calibration_dataset": "Empirical-GAN-Artifact-Benchmark-v1",
+  "calibration_date": "2026-09-10",
+  "auc_roc": 0.9982,
+  "youden_j": 1.0,
+  "distribution_summary": {
+    "real_mean": 3.6773,
+    "real_std": 0.0198,
+    "fake_mean": 68.2249,
+    "fake_std": 39.433
+  }
+}

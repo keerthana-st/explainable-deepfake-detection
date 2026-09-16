@@ -1,0 +1,42 @@
+{
+  "real_ordinary": {
+    "ground_truth": "REAL",
+    "total_samples": 25,
+    "correct": 25,
+    "incorrect": 0,
+    "accuracy": 1.0,
+    "mean_confidence_fake": 0.247,
+    "pred_real": 25,
+    "pred_fake": 0
+  },
+  "fake_gan": {
+    "ground_truth": "FAKE",
+    "total_samples": 25,
+    "correct": 25,
+    "incorrect": 0,
+    "accuracy": 1.0,
+    "mean_confidence_fake": 0.8515,
+    "pred_real": 0,
+    "pred_fake": 25
+  },
+  "fake_diffusion": {
+    "ground_truth": "FAKE",
+    "total_samples": 25,
+    "correct": 25,
+    "incorrect": 0,
+    "accuracy": 1.0,
+    "mean_confidence_fake": 0.8522,
+    "pred_real": 0,
+    "pred_fake": 25
+  },
+  "real_compressed": {
+    "ground_truth": "REAL",
+    "total_samples": 25,
+    "correct": 25,
+    "incorrect": 0,
+    "accuracy": 1.0,
+    "mean_confidence_fake": 0.2508,
+    "pred_real": 25,
+    "pred_fake": 0
+  }
+}
