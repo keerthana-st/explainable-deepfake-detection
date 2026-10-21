@@ -94,6 +94,24 @@ class DisagreementResult:
     classifier_verdict: str = ""
     probabilistic_state: str = ""
 
+    @property
+    def badge(self) -> str:
+        """
+        Confidence badge text strictly driven by decision_basis to eliminate UI contradictions.
+        Never outputs 'CONCORDANT' or 'AGREEMENT' when decision_basis is PROVENANCE_OVERRIDE.
+        """
+        if self.decision_basis == DecisionBasis.PROVENANCE_OVERRIDE.value:
+            return "PROVENANCE OVERRIDE"
+        elif self.decision_basis == DecisionBasis.AGREE.value:
+            return "CONCORDANT (BOTH FAKE)" if self.verdict == "fake" else "CONCORDANT (BOTH REAL)"
+        elif self.decision_basis == DecisionBasis.DISAGREE.value:
+            if self.conflict_type == ConflictType.FREQUENCY_FLAGGED_ONLY.value:
+                return "DISCORDANT (FREQUENCY ONLY)"
+            return "DISCORDANT (CLASSIFIER ONLY)"
+        elif self.decision_basis == DecisionBasis.PROVENANCE_UNCERTAIN.value:
+            return "PROVENANCE UNCERTAIN"
+        return self.decision_basis
+
     def to_dict(self) -> Dict[str, Any]:
         """
         Serializes result into the exact required JSON-compatible output structure.
@@ -102,6 +120,7 @@ class DisagreementResult:
             "verdict": self.verdict,
             "confidence": self.confidence,
             "decision_basis": self.decision_basis,
+            "badge": self.badge,
             "conflict_type": self.conflict_type,
             "output_state": self.output_state,
             "reasoning": self.reasoning,

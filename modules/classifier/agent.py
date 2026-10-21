@@ -26,6 +26,7 @@ import torch.nn as nn
 from PIL import Image
 
 from .model import DeepfakeClassifierModel, get_default_transform, resolve_label_mapping
+from .gradcam import EfficientNetGradCAM
 
 VLM_HALLUCINATION_DISCLAIMER: str = (
     "AI-generated forensic reasoning -- may not reflect verified pixel-level evidence. "
@@ -46,6 +47,30 @@ class ClassifierAnalysisResult:
     reasoning: str
     disagreement_context: str
     hallucination_disclaimer: Optional[str] = None
+    gradcam_heatmap: Optional[np.ndarray] = None
+    peak_bbox: Optional[Dict[str, int]] = None
+    original_image: Optional[np.ndarray] = None
+
+    def get_gradcam_overlay(
+        self,
+        alpha: float = 0.5,
+        colormap: int = cv2.COLORMAP_JET,
+        output_path: Optional[Union[str, Path]] = None,
+    ) -> Optional[np.ndarray]:
+        """Blend Grad-CAM heatmap onto the original image."""
+        if self.original_image is None or self.gradcam_heatmap is None:
+            return None
+        h, w = self.original_image.shape[:2]
+        cam_full = cv2.resize(self.gradcam_heatmap, (w, h), interpolation=cv2.INTER_CUBIC)
+        heatmap_color = cv2.applyColorMap((cam_full * 255).astype(np.uint8), colormap)
+        # Convert RGB to BGR for cv2
+        bgr = cv2.cvtColor(self.original_image, cv2.COLOR_RGB2BGR) if len(self.original_image.shape) == 3 else self.original_image
+        blended = cv2.addWeighted(bgr, 1.0 - alpha, heatmap_color, alpha, 0)
+        if output_path is not None:
+            p = Path(output_path)
+            p.parent.mkdir(parents=True, exist_ok=True)
+            cv2.imwrite(str(p), blended)
+        return blended
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert result to serializable dictionary."""
@@ -58,6 +83,8 @@ class ClassifierAnalysisResult:
             "reasoning": self.reasoning,
             "disagreement_context": self.disagreement_context,
         }
+        if self.peak_bbox is not None:
+            out["peak_bbox"] = self.peak_bbox
         if self.hallucination_disclaimer is not None:
             out["hallucination_disclaimer"] = self.hallucination_disclaimer
         return out
@@ -74,6 +101,7 @@ class ClassifierAgent:
         architecture_name: str = "Option A: EfficientNet-B0 (Semantic Deepfake Classifier)",
         decision_threshold: float = 0.50,
         device: Optional[str] = None,
+        gradcam_enabled: bool = True,
     ):
         """
         Initialize the Classifier Agent.
@@ -88,19 +116,34 @@ class ClassifierAgent:
             Classification threshold for fake prediction.
         device : Optional[str]
             Compute device ('cpu' or 'cuda'). Defaults to 'cpu'.
+        gradcam_enabled : bool, default=True
+            Whether to enable Grad-CAM attention heatmap extraction.
         """
         self.device = torch.device(device or ("cuda" if torch.cuda.is_available() else "cpu"))
         self.architecture_name = architecture_name
         self.decision_threshold = float(decision_threshold)
+        self.gradcam_enabled = gradcam_enabled
 
         # Initialize base model
         self.model = DeepfakeClassifierModel(pretrained=True)
-        default_weights = Path(__file__).resolve().parent.parent.parent / "models" / "classifier_deepfake_weights.pt"
-        target_weights = Path(model_path) if model_path is not None else default_weights
+        base_dir = Path(__file__).resolve().parent.parent.parent
+        candidate_paths = [
+            base_dir / "deepfake_detection" / "models" / "best_model.pth",
+            base_dir / "models" / "efficientnet_deepfake.pth",
+            base_dir / "models" / "classifier_deepfake_weights.pt",
+        ]
+        target_weights = Path(model_path) if model_path is not None else next((p for p in candidate_paths if p.exists()), candidate_paths[-1])
 
+        self.temperature = 1.0
         if target_weights.exists():
             state = torch.load(str(target_weights), map_location=self.device)
-            self.model.load_state_dict(state, strict=False)
+            if isinstance(state, dict) and "state_dict" in state:
+                self.model.load_state_dict(state["state_dict"], strict=False)
+                if "id2label" in state:
+                    self.model.id2label = state["id2label"]
+                self.temperature = float(state.get("temperature", 1.0))
+            elif isinstance(state, dict):
+                self.model.load_state_dict(state, strict=False)
 
         self.model.to(self.device)
         self.model.eval()
@@ -111,6 +154,7 @@ class ClassifierAgent:
         self.fake_idx, self.real_idx = resolve_label_mapping(self.model.id2label)
         self.fake_label_name = self.model.id2label[self.fake_idx]
         self.real_label_name = self.model.id2label[self.real_idx]
+        self.gradcam = EfficientNetGradCAM(self.model)
 
     def _validate_and_load_image(
         self, image_input: Union[str, Path, np.ndarray, Image.Image]
@@ -189,21 +233,21 @@ class ClassifierAgent:
                     sec_vars.append(float(np.var(noise_residual[y1:y2, :])))
 
         if sec_vars:
-            min_sec = max(min(sec_vars), 0.5)
-            max_sec = max(sec_vars)
+            min_sec = max(min(sec_vars), 1e-4)
+            max_sec = max(max(sec_vars), 1e-4)
             noise_ratio = float(max_sec / min_sec)
         else:
             noise_ratio = 1.0
             max_sec = noise_var
 
-        has_inpainting_disparity = bool(noise_ratio >= 2.5 and max_sec >= 4.0)
+        has_inpainting_disparity = bool(noise_ratio >= 3.5 and max_sec >= 4.0)
 
         return {
             "noise_residual_variance": round(noise_var, 4),
             "laplacian_variance": round(lap_var, 4),
             "saturation_dispersion": round(sat_std, 4),
             "section_noise_disparity_ratio": round(noise_ratio, 4),
-            "has_optical_camera_grain": bool(0.5 <= noise_var <= 25.0 and lap_var < 500.0 and noise_ratio < 2.0),
+            "has_optical_camera_grain": bool(0.5 <= noise_var <= 25.0 and lap_var < 500.0 and noise_ratio < 3.5),
             "has_synthetic_contrast_or_smoothing": bool(noise_var > 30.0 or lap_var > 600.0),
             "has_inpainting_noise_disparity": has_inpainting_disparity,
         }
@@ -211,6 +255,7 @@ class ClassifierAgent:
     def analyze(
         self,
         image_input: Union[str, Path, np.ndarray, Image.Image],
+        metadata: Optional[Dict[str, Any]] = None,
     ) -> ClassifierAnalysisResult:
         """
         Perform semantic deepfake and AI-generation classification.
@@ -219,6 +264,8 @@ class ClassifierAgent:
         ----------
         image_input : Union[str, Path, np.ndarray, Image.Image]
             Image path or array.
+        metadata : Optional[Dict[str, Any]]
+            Optional metadata dictionary from preprocessing.
 
         Returns
         -------
@@ -231,11 +278,34 @@ class ClassifierAgent:
         # 1. Semantic visual indicators & physical noise metrics
         cues = self._extract_semantic_cues(np_img)
 
-        # 2. Multi-Scale Spatial Pyramid Scanning (Full image + quadrants + halves + center + costume band)
+        # Detect whether original image was a low-resolution thumbnail (e.g. 32x32)
         w_img, h_img = pil_img.size
+        is_low_res = False
+        if metadata:
+            orig_w = metadata.get("original_width", w_img)
+            orig_h = metadata.get("original_height", h_img)
+            if orig_w < 128 or orig_h < 128:
+                is_low_res = True
+        elif isinstance(image_input, (str, Path)):
+            p = Path(image_input)
+            meta_candidate = p.parent.parent / "metadata" / f"{p.stem.replace('_rgb', '')}_metadata.json"
+            if meta_candidate.exists():
+                try:
+                    import json
+                    with open(meta_candidate, "r") as mf:
+                        m_data = json.load(mf)
+                        if m_data.get("original_width", w_img) < 128 or m_data.get("original_height", h_img) < 128:
+                            is_low_res = True
+                except Exception:
+                    pass
+
+        if not is_low_res and (cues["noise_residual_variance"] < 0.05 and cues["laplacian_variance"] < 15.0):
+            is_low_res = True
+
+        # 2. Multi-Scale Spatial Pyramid Scanning (Full image + quadrants + halves + center + costume band)
         patches: Dict[str, Image.Image] = {"global": pil_img}
 
-        if w_img >= 16 and h_img >= 16:
+        if not is_low_res and w_img >= 16 and h_img >= 16:
             patches.update({
                 "quad_tl": pil_img.crop((0, 0, max(4, int(w_img * 0.60)), max(4, int(h_img * 0.60)))),
                 "quad_tr": pil_img.crop((int(w_img * 0.40), 0, w_img, max(4, int(h_img * 0.60)))),
@@ -269,11 +339,28 @@ class ClassifierAgent:
             max_patch_p = raw_fake_p
             min_patch_p = raw_fake_p
 
-        # Spatial inpainting / localized swap detection
-        is_spatial_inpaint = bool(
-            (max_patch_p >= 0.55 and max_patch_p > min_patch_p + 0.10)
-            or max_patch_p >= 0.65
-        )
+        # Spatial inpainting / localized swap / diffusion disparity detection
+        has_noise_disparity = bool(cues.get("has_inpainting_noise_disparity", False))
+        ratio = cues.get("section_noise_disparity_ratio", 1.0)
+
+        if is_low_res:
+            is_neural_inpaint = False
+        else:
+            face_or_costume_elevated = (
+                (patch_probs.get("top_half", 0.0) >= 0.65 or patch_probs.get("center", 0.0) >= 0.65 or patch_probs.get("costume_band", 0.0) >= 0.65)
+                and raw_fake_p >= 0.50
+            )
+            multi_patch_elevated = (
+                sum(1 for k, v in sub_patches.items() if v >= 0.65) >= 2
+                and raw_fake_p >= 0.50
+            )
+            is_neural_inpaint = bool(
+                (face_or_costume_elevated or multi_patch_elevated)
+                and (has_noise_disparity or not cues.get("has_optical_camera_grain", True))
+            )
+
+        is_spatial_inpaint = is_neural_inpaint or has_noise_disparity
+
         cues["is_inpainting_detected"] = is_spatial_inpaint
         cues["max_manipulated_patch"] = max_patch_name
         cues["max_patch_fake_prob"] = round(max_patch_p, 4)
@@ -282,15 +369,18 @@ class ClassifierAgent:
         cues["patch_probabilities"] = {k: round(v, 4) for k, v in patch_probs.items()}
 
         # 3. Decision Integration
-        if cues["has_synthetic_contrast_or_smoothing"]:
-            # Modern diffusion full generation (e.g. ChatGPT / Midjourney / DALL-E)
-            fake_p = max(raw_fake_p, max_patch_p, 0.85)
-        elif is_spatial_inpaint:
-            # Localized inpainting / face swap / clothing swap detected via spatial pyramid
+        if is_low_res:
+            fake_p = raw_fake_p
+        elif is_neural_inpaint:
+            # Localized inpainting / face swap / clothing swap
             fake_p = max(raw_fake_p, max_patch_p)
-        elif cues["has_optical_camera_grain"] and not is_spatial_inpaint and max_patch_p < 0.35:
-            # Camera grain + spatial uniformity + all patches authentic -> resilient against JPEG compression jitter
-            fake_p = min(0.42, raw_fake_p)
+        elif has_noise_disparity and ratio >= 3.5:
+            # Physical sensor noise disparity across image sections:
+            disparity_boost = float(min(0.92, 0.55 + (ratio - 3.5) * 0.015))
+            fake_p = max(raw_fake_p, max_patch_p, disparity_boost)
+        elif cues["has_optical_camera_grain"] and not is_spatial_inpaint:
+            # Camera grain + spatial uniformity -> authentic photograph; resilient against crop boundary jitter
+            fake_p = min(0.45, raw_fake_p)
         else:
             # Global image score
             fake_p = raw_fake_p
@@ -311,6 +401,16 @@ class ClassifierAgent:
             cues=cues,
         )
 
+        # 5. Extract Grad-CAM Heatmap and Peak Bounding Box
+        cam_norm = None
+        peak_bbox = None
+        try:
+            global_tensor = tensors[0].unsqueeze(0).to(self.device)
+            target_class = self.fake_idx if predicted_label == "FAKE" else self.real_idx
+            cam_norm, peak_bbox = self.gradcam.generate_cam(global_tensor, target_class_idx=target_class)
+        except Exception:
+            pass
+
         return ClassifierAnalysisResult(
             classifier_score=classifier_score,
             all_probabilities=all_probabilities,
@@ -320,6 +420,9 @@ class ClassifierAgent:
             reasoning=reasoning,
             disagreement_context=disagreement_context,
             hallucination_disclaimer=None,
+            gradcam_heatmap=cam_norm,
+            peak_bbox=peak_bbox,
+            original_image=np_img,
         )
 
     def _generate_semantic_reasoning(
@@ -339,9 +442,26 @@ class ClassifierAgent:
         max_patch = cues.get("max_manipulated_patch", "costume_band")
         max_patch_p = cues.get("max_patch_fake_prob", classifier_score)
         ratio = cues.get("section_noise_disparity_ratio", 1.0)
+        has_noise_disparity = cues.get("has_inpainting_noise_disparity", False)
 
         if predicted_label == "FAKE":
-            if is_inpaint:
+            if has_noise_disparity and max_patch_p < 0.55:
+                reasoning = (
+                    f"GENERATIVE SYNTHESIS / SENSOR NOISE DISPARITY DETECTED "
+                    f"(Fake Score: {classifier_score:.4f}, Decision Threshold: {self.decision_threshold:.2f}).\n"
+                    f"Physical sensor analysis identified strong synthetic generative signatures:\n"
+                    f"  • Physical Sensor Noise Disparity: Section noise variance disparity ratio is {ratio:.2f}x "
+                    f"(natural optical camera sensors exhibit uniform shot-noise ratio < 2.0x across the sensor plane).\n"
+                    f"  • Synthetic Bokeh / Decoupled Noise Floor: Subject regions possess high generative texture variance "
+                    f"while surrounding regions exhibit synthetic zero-noise smoothing characteristic of modern diffusion decoders.\n"
+                    f"  • Model Verdict: Confident AI-Generated / Manipulated prediction."
+                )
+                disagreement_context = (
+                    f"DISAGREEMENT LAYER GUIDANCE: Module 2 (Classifier Agent) detected a severe {ratio:.2f}x physical sensor noise "
+                    "disparity indicative of generative diffusion synthesis. When combined with elevated frequency energy, "
+                    "both agents corroborate synthetic origin."
+                )
+            elif is_inpaint:
                 reasoning = (
                     f"PARTIAL INPAINTING / AI COSTUME GENERATION DETECTED "
                     f"(Overall Score: {classifier_score:.4f}, Highest Manipulated Region: '{max_patch}' at {max_patch_p * 100:.1f}%, "

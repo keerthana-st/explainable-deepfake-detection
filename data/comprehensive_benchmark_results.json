@@ -1,0 +1,87 @@
+{
+  "overall": {
+    "total_images": 135,
+    "decided_total": 135,
+    "accuracy_pct": 68.15,
+    "precision": 0.7282,
+    "recall": 0.8333,
+    "f1_score": 0.7772,
+    "fpr": 0.6222,
+    "fnr": 0.1667,
+    "inconclusive_count": 0
+  },
+  "categories": {
+    "real_ordinary": {
+      "ground_truth": "REAL",
+      "total_samples": 15,
+      "correct": 13,
+      "incorrect": 2,
+      "inconclusive": 0,
+      "decided_accuracy_pct": 86.67
+    },
+    "real_compressed": {
+      "ground_truth": "REAL",
+      "total_samples": 15,
+      "correct": 3,
+      "incorrect": 12,
+      "inconclusive": 0,
+      "decided_accuracy_pct": 20.0
+    },
+    "real_social_media": {
+      "ground_truth": "REAL",
+      "total_samples": 15,
+      "correct": 1,
+      "incorrect": 14,
+      "inconclusive": 0,
+      "decided_accuracy_pct": 6.67
+    },
+    "fake_gan": {
+      "ground_truth": "FAKE",
+      "total_samples": 15,
+      "correct": 15,
+      "incorrect": 0,
+      "inconclusive": 0,
+      "decided_accuracy_pct": 100.0
+    },
+    "fake_diffusion": {
+      "ground_truth": "FAKE",
+      "total_samples": 15,
+      "correct": 15,
+      "incorrect": 0,
+      "inconclusive": 0,
+      "decided_accuracy_pct": 100.0
+    },
+    "fake_inpainting_clothing": {
+      "ground_truth": "FAKE",
+      "total_samples": 15,
+      "correct": 15,
+      "incorrect": 0,
+      "inconclusive": 0,
+      "decided_accuracy_pct": 100.0
+    },
+    "fake_inpainting_background": {
+      "ground_truth": "FAKE",
+      "total_samples": 15,
+      "correct": 15,
+      "incorrect": 0,
+      "inconclusive": 0,
+      "decided_accuracy_pct": 100.0
+    },
+    "fake_face_edit": {
+      "ground_truth": "FAKE",
+      "total_samples": 15,
+      "correct": 15,
+      "incorrect": 0,
+      "inconclusive": 0,
+      "decided_accuracy_pct": 100.0
+    },
+    "fake_unseen_generators": {
+      "ground_truth": "FAKE",
+      "total_samples": 15,
+      "correct": 0,
+      "incorrect": 15,
+      "inconclusive": 0,
+      "decided_accuracy_pct": 0.0
+    }
+  }
+}

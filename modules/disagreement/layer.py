@@ -105,10 +105,15 @@ class DisagreementLayer:
         # STEP 3: Apply Category 2 (metadata) check as a SEPARATE, SUBSEQUENT step
         # ---------------------------------------------------------------------
         normalized_flag = meta_flag.lower().strip()
-        has_ai_disclosed = (normalized_flag == "ai_disclosed") and bool(disclosed_tool)
+        has_ai_disclosed = (normalized_flag in ["ai_disclosed", "explicit_synthetic"]) and bool(disclosed_tool)
         is_manifest_unclear = (normalized_flag == "manifest_present_generator_unclear")
+        is_tampered = (normalized_flag == "tampered_inconsistent")
 
         if has_ai_disclosed:
+            final_verdict = "fake"
+            final_confidence = "high"
+            decision_basis = DecisionBasis.PROVENANCE_OVERRIDE.value
+        elif is_tampered:
             final_verdict = "fake"
             final_confidence = "high"
             decision_basis = DecisionBasis.PROVENANCE_OVERRIDE.value
@@ -194,10 +199,11 @@ class DisagreementLayer:
             "=" * 78,
         ]
 
-        # 1. Unified Status & Badge
+        # 1. Unified Status & Badge (strictly derived from decision_basis)
+        badge = result.badge
         if basis == DecisionBasis.PROVENANCE_OVERRIDE.value:
             header_text = "VERDICT: FAKE / SYNTHETIC (PROVENANCE OVERRIDE)"
-            badge_text = f"CONFIDENCE: {conf_upper} | BASIS: PROVENANCE_OVERRIDE"
+            badge_text = f"CONFIDENCE: {conf_upper} | BASIS: PROVENANCE_OVERRIDE | BADGE: {badge}"
             conflict_summary = (
                 f"• OVERRIDE STATUS: CRYPTOGRAPHIC PROVENANCE OVERRIDE ACTIVE\n"
                 f"  Factual provenance credentials disclose synthesis by '{result.scores.disclosed_tool}'.\n"
@@ -207,7 +213,7 @@ class DisagreementLayer:
 
         elif basis == DecisionBasis.PROVENANCE_UNCERTAIN.value:
             header_text = f"VERDICT: {verdict_upper} (PROVENANCE UNCERTAIN)"
-            badge_text = f"CONFIDENCE: {conf_upper} | BASIS: PROVENANCE_UNCERTAIN"
+            badge_text = f"CONFIDENCE: {conf_upper} | BASIS: PROVENANCE_UNCERTAIN | BADGE: {badge}"
             conflict_summary = (
                 f"• PROVENANCE STATUS: Unresolved C2PA manifest present in file.\n"
                 f"  Probabilistic Consensus: Frequency ({result.freq_verdict.upper()}) vs. "
@@ -216,7 +222,7 @@ class DisagreementLayer:
 
         elif basis == DecisionBasis.AGREE.value:
             header_text = f"VERDICT: {verdict_upper} (HIGH CONFIDENCE)"
-            badge_text = f"CONFIDENCE: {conf_upper} | BASIS: CONVERGENT_PROBABILISTIC_AGREEMENT"
+            badge_text = f"CONFIDENCE: {conf_upper} | BASIS: CONVERGENT_PROBABILISTIC_AGREEMENT | BADGE: {badge}"
             conflict_summary = (
                 f"• CONSENSUS STATUS: Both Category 1 probabilistic vision agents agree on {verdict_upper}.\n"
                 f"  - Frequency Agent: {result.freq_verdict.upper()} (Score: {result.scores.frequency:.4f})\n"
@@ -225,7 +231,7 @@ class DisagreementLayer:
 
         else:  # DISAGREE
             header_text = "VERDICT: UNCERTAIN (MANUAL REVIEW REQUIRED)"
-            badge_text = f"CONFIDENCE: {conf_upper} | BASIS: AGENT_DISAGREEMENT"
+            badge_text = f"CONFIDENCE: {conf_upper} | BASIS: AGENT_DISAGREEMENT | BADGE: {badge}"
             conflict_summary = (
                 f"• CONFLICT BREAKDOWN: Category 1 probabilistic agents are in active disagreement:\n"
                 f"  - Frequency Agent: {result.freq_verdict.upper()} (Score: {result.scores.frequency:.4f})\n"

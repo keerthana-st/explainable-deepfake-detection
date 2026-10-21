@@ -1,0 +1,55 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Virtual environments
+.env
+.venv
+env/
+venv/
+ENV/
+
+# Testing & Coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Frontend dependencies & build artifacts
+node_modules/
+frontend/node_modules/
+frontend/dist/
+*.local
+
+# Ephemeral uploads and runtime generated visualizations
+outputs/uploads/*
+!outputs/uploads/.gitkeep
+outputs/frequency/*
+!outputs/frequency/.gitkeep
+outputs/classifier/*
+!outputs/classifier/.gitkeep
+outputs/preprocessing/*
+!outputs/preprocessing/.gitkeep
+outputs/secondary/*
+!outputs/secondary/.gitkeep
+outputs/ablation/exp*
+outputs/history.json
+outputs/*.png
+dct_spectrum.png
+radial_decay.png
+gradcam_overlay.png
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS & Editor artifacts
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo

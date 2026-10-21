@@ -20,6 +20,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+from modules.preprocessing import preprocess_image
 from modules.frequency.agent import FrequencyAgent
 from modules.classifier.agent import ClassifierAgent
 from modules.metadata.agent import MetadataAgent
@@ -30,9 +31,26 @@ VALID_EXTS = {'.jpg', '.jpeg', '.png', '.webp', '.bmp', '.tiff'}
 
 def analyze_image(img_path: Path, freq_agent, cls_agent, meta_agent, dis_layer):
     try:
-        freq_res = freq_agent.analyze(img_path, keep_original=False)
-        cls_res = cls_agent.analyze(img_path)
+        # Preprocessing: generate decoupled representations
+        prep_res = preprocess_image(img_path, save_artifacts=False)
+        if not prep_res.is_success:
+            return {
+                'file': img_path.name,
+                'prediction': 'ERROR',
+                'confidence': 'N/A',
+                'evidence': f"Preprocessing: {prep_res.error_message}"[:45],
+                'freq_score': 'N/A',
+                'cls_score': 'N/A',
+                'meta': 'N/A',
+            }
+
+        # Module 1 receives Grayscale representation
+        freq_res = freq_agent.analyze(prep_res.grayscale_image, keep_original=False)
+        # Module 2 receives RGB representation
+        cls_res = cls_agent.analyze(prep_res.rgb_image, metadata=prep_res.metadata)
+        # Module 3 receives original raw image/bytes
         meta_res = meta_agent.analyze(img_path)
+        # Module 4 performs zero-fusion arbitration
         dis_res = dis_layer.arbitrate(freq_res, cls_res, meta_res)
 
         # Map to user-friendly prediction
@@ -51,14 +69,11 @@ def analyze_image(img_path: Path, freq_agent, cls_agent, meta_agent, dis_layer):
             conf = f"{score * 100:.1f}%"
             evidence = "Natural Optical Grain & Uniform Noise Floor"
         elif dis_res.output_state == 'UNCERTAIN_classifier_flagged_only':
-            pred = 'FAKE'
-            conf = f"{cls_res.classifier_score * 100:.1f}%"
+            pred = 'UNCERTAIN'
+            conf = 'LOW'
             max_patch = cls_res.semantic_indicators.get('max_manipulated_patch', 'localized')
             ratio = cls_res.semantic_indicators.get('section_noise_disparity_ratio', 1.0)
-            if ratio >= 2.5:
-                evidence = f"Inpainting / Costume ({max_patch}, {ratio:.1f}x noise disparity)"
-            else:
-                evidence = f"Diffusion Synthesis in '{max_patch}'"
+            evidence = f"Classifier Flagged '{max_patch}' ({ratio:.1f}x noise disparity); Frequency Real"
         elif dis_res.output_state == 'UNCERTAIN_frequency_flagged_only':
             pred = 'SUSPICIOUS'
             conf = f"{freq_res.frequency_score * 100:.1f}%"

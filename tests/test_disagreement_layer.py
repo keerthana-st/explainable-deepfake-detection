@@ -209,6 +209,62 @@ def test_state_c_provenance_override_when_both_agents_said_fake(analyzer):
     assert res.output_state == OutputState.PROVENANCE_OVERRIDE_FAKE.value
 
 
+def test_user_specified_provenance_override_contract(analyzer):
+    """
+    EXACT USER VERIFICATION TEST CASE:
+    Input:
+      frequency_score: 0.096 (real)
+      classifier_score: 0.150 (real)
+      metadata_flag: "ai_disclosed"
+      disclosed_tool: "ChatGPT"
+
+    Expected output:
+      final_verdict: "fake"
+      decision_basis: "PROVENANCE_OVERRIDE"
+      conflict_breakdown: must explain that both vision models said real,
+        but provenance overrides them
+      UI:
+        - Header must say FAKE
+        - Badge must say PROVENANCE OVERRIDE (never CONCORDANT)
+        - Reasoning must state both models said real but provenance confirmed fake
+    """
+    res = analyzer.arbitrate(
+        frequency_result={"frequency_score": 0.096},
+        classifier_result={"classifier_score": 0.150},
+        metadata_result={"metadata_flag": "ai_disclosed", "disclosed_tool": "ChatGPT"},
+    )
+
+    # 1. Output properties
+    assert res.verdict == "fake"
+    assert res.decision_basis == "PROVENANCE_OVERRIDE"
+    assert res.output_state == OutputState.PROVENANCE_OVERRIDE_FAKE.value
+    assert res.confidence == "high"
+    assert res.badge == "PROVENANCE OVERRIDE"
+
+    # 2. Reasoning Phrasing Mandate
+    expected_override_phrase = (
+        "Frequency and Classifier agents both indicated REAL, but cryptographic "
+        "provenance metadata (disclosed generator: ChatGPT) confirms synthetic origin. "
+        "This provenance evidence overrides the probabilistic signals, as it constitutes "
+        "direct, verifiable proof rather than statistical inference."
+    )
+    assert expected_override_phrase in res.reasoning
+    assert "Frequency and Classifier agents both indicated REAL" in res.reasoning
+    assert "disclosed generator: ChatGPT" in res.reasoning
+    assert "overrides the probabilistic signals" in res.reasoning
+
+    # 3. UI report consistency
+    report = analyzer.format_ui_report(res)
+    assert "FAKE" in report
+    assert "PROVENANCE OVERRIDE" in report
+    assert "CONCORDANT" not in report.upper()
+    assert "NO CONFLICT" not in report.upper()
+    assert "BASIS: CONVERGENT_PROBABILISTIC_AGREEMENT" not in report
+    assert "CONCORDANT" not in res.badge.upper()
+    assert "AGREEMENT" not in res.badge.upper()
+    assert "NO CONFLICT" not in res.badge.upper()
+
+
 # =============================================================================
 # 4. STATE D TESTS: PROVENANCE UNCERTAIN (EDGE CASE)
 # =============================================================================

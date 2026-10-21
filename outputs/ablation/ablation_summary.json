@@ -1,0 +1,53 @@
+{
+  "target_image": "D:\\dog.jpg",
+  "results": [
+    {
+      "experiment_id": "exp1_primary_only",
+      "experiment_name": "Exp 1: Primary System Only",
+      "latency_seconds": 1.872,
+      "global_verdict": "AI-GENERATED / FAKE",
+      "global_confidence": "90.6%",
+      "regions_evaluated": 0,
+      "suspicious_regions": 0,
+      "consistency_status": "N/A",
+      "gradcam_generated": true,
+      "artifacts_count": 4
+    },
+    {
+      "experiment_id": "exp2_secondary_classifier_only",
+      "experiment_name": "Exp 2: Primary + Secondary (Classifier-Only Regions)",
+      "latency_seconds": 2.699,
+      "global_verdict": "AI-GENERATED / FAKE",
+      "global_confidence": "90.6%",
+      "regions_evaluated": 2,
+      "suspicious_regions": 2,
+      "consistency_status": "SUPPORTED",
+      "gradcam_generated": true,
+      "artifacts_count": 6
+    },
+    {
+      "experiment_id": "exp3_secondary_freq_fusion",
+      "experiment_name": "Exp 3: Primary + Secondary + Frequency Regional Fusion",
+      "latency_seconds": 2.316,
+      "global_verdict": "AI-GENERATED / FAKE",
+      "global_confidence": "90.6%",
+      "regions_evaluated": 2,
+      "suspicious_regions": 2,
+      "consistency_status": "SUPPORTED",
+      "gradcam_generated": true,
+      "artifacts_count": 6
+    },
+    {
+      "experiment_id": "exp4_full_multimodal",
+      "experiment_name": "Exp 4: Full System (Primary + Secondary + Freq + Grad-CAM)",
+      "latency_seconds": 2.714,
+      "global_verdict": "AI-GENERATED / FAKE",
+      "global_confidence": "90.6%",
+      "regions_evaluated": 2,
+      "suspicious_regions": 2,
+      "consistency_status": "SUPPORTED",
+      "gradcam_generated": true,
+      "artifacts_count": 8
+    }
+  ]
+}

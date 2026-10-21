@@ -212,3 +212,38 @@ class TestMetadataAndExplainability:
         assert heatmap is not None
         assert heatmap.shape == (64, 64, 3)
         assert heatmap.dtype == np.uint8
+
+    def test_command_prompt_output_clean_of_tabular_ml(self, agent):
+        img = np.zeros((128, 128, 3), dtype=np.uint8)
+        res = agent.analyze(img)
+
+        # 1. format_console_output structure check
+        out = res.format_console_output()
+        assert "MODULE 1: FREQUENCY AGENT" in out
+        assert "• Classical Verdict:" in out
+        assert "• Frequency Score:" in out
+        assert "• Raw Energy Score:" in out
+        assert "• Separation Threshold:" in out
+        assert "• Cropped Resolution:" in out
+        assert "Explainable Reasoning:" in out
+        assert "NATURAL FREQUENCY PROFILE" in out
+
+        # 2. Strict omission of all 28-D Tabular ML details from displayed output
+        forbidden_terms = [
+            "28-D Tabular ML",
+            "28-D ML Verdict",
+            "radial_power_band_0",
+            "z-score",
+            "ML probability",
+            "Top Frequency Driver",
+            "28-D ML Classifier Analysis",
+        ]
+        for term in forbidden_terms:
+            assert term.lower() not in out.lower()
+            assert term.lower() not in res.reasoning.lower()
+
+        # 3. Internal fields and DCT calculations remain fully intact
+        assert hasattr(res, "coefficient_map")
+        assert hasattr(res, "frequency_score")
+        assert hasattr(res, "raw_score")
+        assert res.features_28d is not None

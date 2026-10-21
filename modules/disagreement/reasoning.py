@@ -26,33 +26,38 @@ def build_disagreement_reasoning(
         tool_str = disclosed_tool if disclosed_tool else "AI Generation Tool"
         
         if freq_verdict == "real" and classifier_verdict == "real":
-            agent_context = (
-                f"Both the Frequency Agent (score: {freq_score:.4f}, verdict: REAL) and the "
-                f"Classifier Agent (score: {classifier_score:.4f}, verdict: REAL) evaluated this "
-                f"image as authentic photographic capture"
+            agent_clause = "Frequency and Classifier agents both indicated REAL"
+            basis_detail = (
+                f"Although both vision models evaluated this image as authentic photographic capture "
+                f"(Frequency: {freq_score:.4f}, Classifier: {classifier_score:.4f}), embedded C2PA / EXIF "
+                f"digital credentials provide cryptographically signed, deterministic proof of generation."
             )
         elif freq_verdict != classifier_verdict:
+            agent_clause = "Frequency and Classifier disagreed"
             flagged = "Frequency Agent" if freq_verdict == "fake" else "Classifier Agent"
             unflagged = "Classifier Agent" if freq_verdict == "fake" else "Frequency Agent"
-            agent_context = (
-                f"The probabilistic vision agents were in active disagreement ({flagged} flagged FAKE "
-                f"while {unflagged} predicted REAL)"
+            basis_detail = (
+                f"Although the probabilistic vision agents were in conflict ({flagged} flagged FAKE "
+                f"while {unflagged} predicted REAL), embedded C2PA / EXIF digital credentials provide "
+                f"cryptographically signed, deterministic proof of generation."
             )
         else:
             # Both agreed on fake
-            agent_context = (
+            agent_clause = "Frequency and Classifier agents both indicated FAKE"
+            basis_detail = (
                 f"Both probabilistic vision agents independently flagged this image as synthetic "
-                f"(Frequency: {freq_score:.4f}, Classifier: {classifier_score:.4f})"
+                f"(Frequency: {freq_score:.4f}, Classifier: {classifier_score:.4f}), which is corroborated "
+                f"by embedded C2PA / EXIF digital credentials providing cryptographically signed proof."
             )
 
         return (
-            f"PROVENANCE OVERRIDE DETECTED: {agent_context}, but cryptographic provenance metadata "
-            f"(disclosed generator: '{tool_str}') confirms synthetic origin. "
-            f"Provenance evidence overrides probabilistic signals as it constitutes direct, verifiable proof "
-            f"rather than statistical inference.\n\n"
-            f"ARBITRATION BASIS: Embedded C2PA / EXIF digital credentials provide cryptographically signed, "
-            f"deterministic proof of generation. Statistical and machine-learned estimates are categorically "
-            f"superseded by factual disclosure."
+            f"PROVENANCE OVERRIDE DETECTED: {agent_clause}, but cryptographic provenance metadata "
+            f"(disclosed generator: {tool_str}) confirms synthetic origin. "
+            f"This provenance evidence overrides the probabilistic signals, as it constitutes direct, "
+            f"verifiable proof rather than statistical inference.\n\n"
+            f"ARBITRATION BASIS: {basis_detail} "
+            f"This provenance evidence overrides probabilistic signals because statistical and machine-learned "
+            f"estimates are categorically superseded by factual disclosure."
         )
 
     # -------------------------------------------------------------------------
